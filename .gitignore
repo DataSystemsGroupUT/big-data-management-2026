@@ -1,0 +1,50 @@
+# --- Jupyter ---
+.ipynb_checkpoints/
+**/.ipynb_checkpoints/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.venv/
+venv/
+.env
+.env.*
+
+# --- Data ---
+data/
+datasets/
+*.csv
+*.parquet
+*.jsonl
+*.db
+*.duckdb
+*.sqlite
+*.sqlite3
+
+# --- Outputs / artifacts ---
+outputs/
+results/
+logs/
+*.log
+*.tmp
+
+# --- Spark local artifacts ---
+spark-warehouse/
+metastore_db/
+derby.log
+*.crc
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# --- notebooks exports ---
+*.html
+*.pdf
+
+
