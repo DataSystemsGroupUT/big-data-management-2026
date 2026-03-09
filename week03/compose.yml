@@ -1,0 +1,46 @@
+services:
+
+  # Kafka broker running in KRaft mode (no ZooKeeper)
+  # apache/kafka is the official ASF image (free, no vendor restrictions).
+  # pyspark-notebook:2025-12-31 ships Spark 4.1.0 (Scala 2.13).
+  # If you use a different image tag, check Cell 1 output and update PYSPARK_SUBMIT_ARGS.
+  kafka:
+    image: apache/kafka:3.9.2
+    container_name: kafka
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      # Fixed cluster ID so the broker survives container restarts cleanly.
+      # Generate a fresh one with: docker run --rm apache/kafka:3.9.2 kafka-storage.sh random-uuid
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qg
+
+  # Jupyter + PySpark with the Kafka Spark connector pre-loaded
+  jupyter:
+    image: quay.io/jupyter/pyspark-notebook:2025-12-31
+    container_name: week03_jupyter
+    depends_on:
+      - kafka
+    ports:
+      - "8888:8888"   # Jupyter UI
+      - "4040:4040"   # Spark UI (increments for each new SparkContext: 4041, …)
+    volumes:
+      - ./work/:/home/jovyan/work
+    environment:
+      - JUPYTER_TOKEN=bdm
+      # Kafka connector JARs downloaded at PySpark start-up.
+      # Spark 4.x uses Scala 2.13 (_2.13). Update the version if Cell 1 reports a different Spark version.
+      - PYSPARK_SUBMIT_ARGS=--packages org.apache.spark:spark-sql-kafka-0-10_2.13:4.1.0 pyspark-shell
+    command: >
+      start-notebook.py
+      --ServerApp.token=bdm
+      --ServerApp.password=''
+      --ServerApp.allow_origin='*'
+      --ServerApp.allow_remote_access=True
