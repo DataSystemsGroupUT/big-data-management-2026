@@ -49,19 +49,19 @@ docker compose down   # when done
 │  │  (S3 API :9000)  │  Bucket: warehouse/                │
 │  │  (Console :9001) │  Stores Parquet files + metadata   │
 │  └────────┬─────────┘                                    │
-│           │  s3a://warehouse/...                          │
+│           │  s3a://warehouse/...                         │
 │  ┌────────▼─────────────────────────────────────────┐    │
 │  │  jupyter (pyspark-notebook)                      │    │
 │  │                                                  │    │
-│  │  PySpark 4.1 + Iceberg 1.10.1 + AWS bundle      │    │
+│  │  PySpark 4.1 + Iceberg 1.10.1 + AWS bundle       │    │
 │  │  • Iceberg Hadoop catalog → s3a://warehouse      │    │
-│  │  • Reads/writes Parquet on MinIO (not local disk) │    │
+│  │  • Reads/writes Parquet on MinIO (not local disk)│    │
 │  │                                                  │    │
 │  │  Notebook: work/week_04_practice.ipynb           │    │
 │  └──────────────────────────────────────────────────┘    │
-│         ▲              ▲                                  │
-│    localhost:8888  localhost:4040                          │
-│    (Jupyter UI)    (Spark UI)                             │
+│         ▲              ▲                                 │
+│    localhost:8888  localhost:4040                        │
+│    (Jupyter UI)    (Spark UI)                            │
 └──────────────────────────────────────────────────────────┘
          ▲
     localhost:9001
