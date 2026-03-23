@@ -1,4 +1,6 @@
 services:
+  # S3-compatible object storage — simulates cloud storage (AWS S3, GCS, Azure Blob)
+  # Students can browse buckets and files via the MinIO Console at localhost:9001
   minio:
     image: minio/minio:latest
     container_name: minio
@@ -7,12 +9,13 @@ services:
       MINIO_ROOT_PASSWORD: password
       MINIO_DOMAIN: minio
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "9000:9000"    # S3 API
+      - "9001:9001"    # MinIO Console (web UI)
     command: server /data --console-address ":9001"
     volumes:
       - minio-data:/data
 
+  # Create the 'warehouse' bucket on first startup
   minio-init:
     image: minio/mc:latest
     container_name: minio-init
@@ -26,19 +29,24 @@ services:
         echo 'Bucket warehouse ready';
       "
 
+  # Jupyter + PySpark with Iceberg runtime + S3/AWS dependencies
+  # pyspark-notebook:2025-12-31 ships Spark 4.1.0 (Hadoop 3.4.1, Scala 2.13)
+  # IMPORTANT: hadoop-aws version MUST match the Hadoop version bundled with Spark.
+  # Spark 4.1.0 = Hadoop 3.4.1 → use hadoop-aws:3.4.1
+  # Using a mismatched version (e.g., 3.3.4) causes NumberFormatException: "60s"
   jupyter:
     image: quay.io/jupyter/pyspark-notebook:2025-12-31
     container_name: week04_jupyter
     depends_on:
       - minio
     ports:
-      - "8888:8888"
-      - "4040:4040"
+      - "8888:8888"   # Jupyter UI
+      - "4040:4040"   # Spark UI
     volumes:
       - ./work/:/home/jovyan/work
     environment:
       - JUPYTER_TOKEN=bdm
-      - PYSPARK_SUBMIT_ARGS=--packages org.apache.iceberg:iceberg-spark-runtime-4.0_2.13:1.10.1,org.apache.iceberg:iceberg-aws-bundle:1.10.1,org.apache.hadoop:hadoop-aws:3.3.4 pyspark-shell
+      - PYSPARK_SUBMIT_ARGS=--packages org.apache.iceberg:iceberg-spark-runtime-4.0_2.13:1.10.1,org.apache.iceberg:iceberg-aws-bundle:1.10.1,org.apache.hadoop:hadoop-aws:3.4.1 pyspark-shell
       - AWS_ACCESS_KEY_ID=admin
       - AWS_SECRET_ACCESS_KEY=password
       - AWS_REGION=us-east-1
