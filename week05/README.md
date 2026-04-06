@@ -45,14 +45,14 @@ docker compose down -v   # when done (-v removes volumes for clean restart)
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────────────────────────────┐
-│  Docker Compose network                                              │
-│                                                                      │
-│  ┌──────────────┐         ┌──────────────────┐                       │
+┌───────────────────────────────────────────────────────────────────────┐
+│  Docker Compose network                                               │
+│                                                                       │
+│  ┌──────────────┐         ┌──────────────────┐                        │
 │  │  postgres     │  WAL    │  connect         │                       │
 │  │  (source DB)  │───────►│  (Debezium on     │                       │
-│  │  :5432        │         │   Kafka Connect)  │                       │
-│  │  wal_level=   │         │  :8083 REST API   │                       │
+│  │  :5432        │         │   Kafka Connect)  │                      │
+│  │  wal_level=   │         │  :8083 REST API   │                      │
 │  │  logical      │         └────────┬─────────┘                       │
 │  └──────────────┘                  │ produces CDC events              │
 │                                    ▼                                  │
@@ -64,19 +64,19 @@ docker compose down -v   # when done (-v removes volumes for clean restart)
 │                       │ consumed by                                   │
 │  ┌────────────────────▼─────────────────────────────────────────┐     │
 │  │  jupyter (pyspark-notebook)                                  │     │
-│  │  PySpark 4.1 + Iceberg 1.10.1 + Kafka connector             │     │
+│  │  PySpark 4.1 + Iceberg 1.10.1 + Kafka connector              │     │
 │  │  • Reads CDC events from Kafka                               │     │
 │  │  • Writes Bronze Iceberg table (append-only) on MinIO        │     │
 │  │  • Writes Silver Iceberg table (MERGE INTO) on MinIO         │     │
 │  │  Notebook: work/week_05_practice.ipynb                       │     │
 │  └──────────────────────────────────────────────────────────────┘     │
-│                                                                      │
-│  ┌──────────────────┐                                                │
-│  │  minio           │  S3-compatible object storage                  │
-│  │  :9000 (S3 API)  │  Bucket: warehouse/                            │
-│  │  :9001 (Console) │  Stores Parquet + Iceberg metadata             │
-│  └──────────────────┘                                                │
-└──────────────────────────────────────────────────────────────────────┘
+│                                                                       │
+│  ┌──────────────────┐                                                 │
+│  │  minio           │  S3-compatible object storage                   │
+│  │  :9000 (S3 API)  │  Bucket: warehouse/                             │
+│  │  :9001 (Console) │  Stores Parquet + Iceberg metadata              │
+│  └──────────────────┘                                                 │
+└───────────────────────────────────────────────────────────────────────┘
          ▲         ▲           ▲            ▲
     :8888     :4040       :9001        :8083
    Jupyter   Spark UI   MinIO Console  Connect API
