@@ -1,0 +1,169 @@
+# =============================================================================
+# Week 05 — Change Data Capture with Debezium + Kafka + Iceberg
+#
+# Combines:
+#   - Kafka from Seminar 3 (KRaft, same image)
+#   - MinIO + Iceberg from Seminar 4 (same image, same bucket)
+#   - NEW: PostgreSQL (source database for CDC)
+#   - NEW: Debezium/Kafka Connect (reads PostgreSQL WAL → Kafka topics)
+#
+# Usage:
+#   docker compose up -d
+#   docker compose down -v   (clean shutdown, removes volumes)
+# =============================================================================
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL — the OLTP source database that Debezium will monitor
+  # wal_level=logical enables the Write-Ahead Log output needed for CDC
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: postgres
+    environment:
+      POSTGRES_USER: cdc_user
+      POSTGRES_PASSWORD: cdc_pass
+      POSTGRES_DB: sourcedb
+    command:
+      - postgres
+      - -c
+      - wal_level=logical          # required for Debezium
+      - -c
+      - max_wal_senders=4
+      - -c
+      - max_replication_slots=4
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cdc_user -d sourcedb"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ---------------------------------------------------------------------------
+  # Kafka — KRaft mode, single node (reused from Seminar 3)
+  # ---------------------------------------------------------------------------
+  kafka:
+    image: apache/kafka:3.9.2
+    container_name: kafka
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      # Compact CDC topics so they retain latest value per key
+      KAFKA_LOG_CLEANUP_POLICY: compact
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qg
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ---------------------------------------------------------------------------
+  # Debezium / Kafka Connect — reads PostgreSQL WAL, produces to Kafka
+  # Image: quay.io/debezium/connect:3.0 is built against Kafka 3.9.x
+  # ---------------------------------------------------------------------------
+  connect:
+    image: quay.io/debezium/connect:3.0
+    container_name: connect
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8083:8083"
+    environment:
+      BOOTSTRAP_SERVERS: kafka:9092
+      GROUP_ID: 1
+      CONFIG_STORAGE_TOPIC: _connect_configs
+      OFFSET_STORAGE_TOPIC: _connect_offsets
+      STATUS_STORAGE_TOPIC: _connect_statuses
+      CONFIG_STORAGE_REPLICATION_FACTOR: 1
+      OFFSET_STORAGE_REPLICATION_FACTOR: 1
+      STATUS_STORAGE_REPLICATION_FACTOR: 1
+      # Use JSON without schemas for simpler event inspection
+      KEY_CONVERTER_SCHEMAS_ENABLE: "false"
+      VALUE_CONVERTER_SCHEMAS_ENABLE: "false"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8083/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
+
+  # ---------------------------------------------------------------------------
+  # MinIO — S3-compatible object storage (reused from Seminar 4)
+  # ---------------------------------------------------------------------------
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: password
+      MINIO_DOMAIN: minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio-data:/data
+
+  # Create the 'warehouse' bucket on first startup
+  minio-init:
+    image: minio/mc:latest
+    container_name: minio-init
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+        sleep 3;
+        mc alias set local http://minio:9000 admin password;
+        mc mb --ignore-existing local/warehouse;
+        echo 'Bucket warehouse ready';
+      "
+
+  # ---------------------------------------------------------------------------
+  # Jupyter + PySpark with Iceberg + Kafka connector
+  # Combines the JARs from Seminar 3 (Kafka connector) and Seminar 4 (Iceberg + S3)
+  # ---------------------------------------------------------------------------
+  jupyter:
+    image: quay.io/jupyter/pyspark-notebook:2025-12-31
+    container_name: week05_jupyter
+    depends_on:
+      connect:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    ports:
+      - "8888:8888"
+      - "4040:4040"
+    volumes:
+      - ./work/:/home/jovyan/work
+    environment:
+      - JUPYTER_TOKEN=bdm
+      # Combined packages: Iceberg runtime + AWS/S3 bundle + Kafka connector
+      - PYSPARK_SUBMIT_ARGS=--packages org.apache.iceberg:iceberg-spark-runtime-4.0_2.13:1.10.1,org.apache.iceberg:iceberg-aws-bundle:1.10.1,org.apache.hadoop:hadoop-aws:3.4.1,org.apache.spark:spark-sql-kafka-0-10_2.13:4.1.0 pyspark-shell
+      - AWS_ACCESS_KEY_ID=admin
+      - AWS_SECRET_ACCESS_KEY=password
+      - AWS_REGION=us-east-1
+    command: >
+      start-notebook.py
+      --ServerApp.token=bdm
+      --ServerApp.password=''
+      --ServerApp.allow_origin='*'
+      --ServerApp.allow_remote_access=True
+
+volumes:
+  pg-data:
+  minio-data:
