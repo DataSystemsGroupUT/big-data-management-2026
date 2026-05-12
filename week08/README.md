@@ -89,3 +89,6 @@ docker compose logs airflow-scheduler   # if something looks off
 ## When things break
 
 See [`SETUP.md`](SETUP.md) for troubleshooting.
+
+## Architecture
+![Lab 8.png](Lab%208.png)
